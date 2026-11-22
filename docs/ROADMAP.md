@@ -10,13 +10,13 @@ Take one step per session. Tick boxes as you go.
 **Goal:** an empty but professional Python project in which lint, type checks and tests all run.
 **Concepts:** virtual environments, `pyproject.toml`, packages vs modules, `src/` layout, linting, static typing, CI.
 
-- [ ] `git init`, `.gitignore`, `uv init` with a `src/` layout
-- [ ] ruff (lint + format) configured in `pyproject.toml`
-- [ ] mypy in strict mode configured
-- [ ] pytest runs, with one trivial passing test
-- [ ] pre-commit hooks (ruff, mypy)
-- [ ] GitHub Actions CI: lint, types, tests
-- [ ] README: how to set up and run the checks
+- [x] `git init`, `.gitignore`, `uv init` with a `src/` layout
+- [x] ruff (lint + format) configured in `pyproject.toml`
+- [x] mypy in strict mode configured
+- [x] pytest runs, with one trivial passing test
+- [x] pre-commit hooks (ruff, mypy)
+- [x] GitHub Actions CI: lint, types, tests
+- [x] README: how to set up and run the checks
 
 ## Phase 1: URL pipeline (pure domain)
 
