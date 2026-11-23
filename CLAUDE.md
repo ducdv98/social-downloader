@@ -17,6 +17,8 @@ This is a **learning project**. The owner is learning Python by building it, and
 - One topic per answer, then let the owner pick what's next.
 - Add a diagram or chart when it helps (flows, layers, sequences).
 - Map every concept to the Python feature or library it teaches.
+- **The owner will not open cobalt.** Before teaching a step, read the relevant cobalt source yourself, then show the real details inline: the actual code (short excerpts with file and line), exact values (error codes, patterns, field names) and *why* cobalt does it that way. Never say "see cobalt's file X"; bring the content here.
+- Say what cobalt does, then what the Python port should do differently or the same, and why.
 
 ## Session protocol
 
