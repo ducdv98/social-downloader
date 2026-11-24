@@ -1,4 +1,10 @@
+from dataclasses import dataclass
+from typing import Literal
 from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
+
+import tldextract
+
+_EXTRACTOR = tldextract.TLDExtract(suffix_list_urls=())
 
 TWITTER_ALT_HOSTS = frozenset({"x.com", "vxtwitter.com", "fixvx.com"})
 YOUTUBE_HOSTS = frozenset({"youtube.com", "www.youtube.com", "m.youtube.com"})
@@ -7,6 +13,20 @@ YOUTUBE_WATCH_PREFIXES = frozenset({"shorts", "live"})
 QUERY_WHITELIST: dict[str, str] = {
     "twitter.com": "post_id",
     **dict.fromkeys(YOUTUBE_HOSTS, "v"),
+}
+
+_ALWAYS_ALLOWED_SUBDOMAINS: frozenset[str] = frozenset({"www", ""})
+
+
+@dataclass(frozen=True)
+class ServiceConfig:
+    tld: str = "com"
+    subdomains: frozenset[str] | Literal["*"] = frozenset()
+
+
+SERVICES: dict[str, ServiceConfig] = {
+    "twitter": ServiceConfig(tld="com", subdomains=frozenset({"mobile"})),
+    "youtube": ServiceConfig(tld="com", subdomains=frozenset({"m", "music"})),
 }
 
 
@@ -59,3 +79,33 @@ def clean_url(url: str) -> str:
     return urlunsplit(
         parts._replace(netloc=clean_netloc, path=path, query=query, fragment="")
     )
+
+
+def get_host_if_valid(url: str) -> str | None:
+    """Return the service key of a URL if it is a known service and valid, else None."""
+
+    hostname = urlsplit(url).hostname
+    if not hostname:
+        return None
+
+    extracted_url = _EXTRACTOR(hostname)
+    domain = extracted_url.domain
+
+    if not domain:
+        return None
+
+    service = SERVICES.get(domain)
+
+    if service is None:
+        return None
+
+    if service.tld != extracted_url.suffix:
+        return None
+
+    if extracted_url.subdomain in _ALWAYS_ALLOWED_SUBDOMAINS:
+        return extracted_url.domain
+
+    if service.subdomains != "*" and extracted_url.subdomain not in service.subdomains:
+        return None
+
+    return extracted_url.domain

@@ -1,6 +1,6 @@
 import pytest
 
-from social_downloader.domain.url import alias_url, clean_url
+from social_downloader.domain.url import alias_url, clean_url, get_host_if_valid
 
 # (input, expected). Rows with expected == input must stay unchanged.
 ALIAS_CASES = [
@@ -150,3 +150,41 @@ CLEAN_CASES = [
 @pytest.mark.parametrize(("url", "expected"), CLEAN_CASES)
 def test_clean_url(url: str, expected: str) -> None:
     assert clean_url(url) == expected
+
+
+# (input, expected service key or None). Input is already aliased + cleaned.
+HOST_CASES = [
+    # Valid: bare host, www, listed subdomain
+    pytest.param("https://youtube.com/watch?v=ID", "youtube", id="youtube bare"),
+    pytest.param("https://www.youtube.com/watch?v=ID", "youtube", id="youtube www"),
+    pytest.param("https://m.youtube.com/watch?v=ID", "youtube", id="youtube m"),
+    pytest.param("https://music.youtube.com/watch?v=ID", "youtube", id="youtube music"),
+    pytest.param("https://twitter.com/u/status/1", "twitter", id="twitter bare"),
+    pytest.param("https://www.twitter.com/u/status/1", "twitter", id="twitter www"),
+    pytest.param(
+        "https://mobile.twitter.com/u/status/1", "twitter", id="twitter mobile"
+    ),
+    pytest.param("https://YouTube.COM/watch?v=ID", "youtube", id="host is lowercased"),
+    # Invalid subdomain
+    pytest.param("https://evil.youtube.com/watch?v=ID", None, id="unlisted subdomain"),
+    pytest.param(
+        "https://m.twitter.com/u/status/1", None, id="m not listed for twitter"
+    ),
+    pytest.param("https://a.www.youtube.com/watch?v=ID", None, id="nested subdomain"),
+    # Wrong tld
+    pytest.param("https://youtube.ru/watch?v=ID", None, id="wrong tld"),
+    pytest.param("https://youtube.co.uk/watch?v=ID", None, id="multi-label suffix"),
+    # Unknown service
+    pytest.param("https://example.com/video", None, id="unknown sld"),
+    pytest.param("https://x.com/u/status/1", None, id="alias not applied yet"),
+    # No public suffix / not a domain
+    pytest.param("https://localhost/x", None, id="localhost"),
+    pytest.param("https://127.0.0.1/x", None, id="ip address"),
+    pytest.param("not a url", None, id="garbage"),
+    pytest.param("", None, id="empty string"),
+]
+
+
+@pytest.mark.parametrize(("url", "expected"), HOST_CASES)
+def test_get_host_if_valid(url: str, expected: str | None) -> None:
+    assert get_host_if_valid(url) == expected
