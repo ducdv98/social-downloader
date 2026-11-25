@@ -28,8 +28,8 @@ Take one step per session. Tick boxes as you go.
 - [x] `alias_url`: youtu.be, x.com → twitter.com, etc. (only the youtube and twitter cases so far; the rest arrive with their services)
 - [x] `clean_url`: strip the query (with a per-service whitelist), hash, port, credentials and trailing slash (whitelist covers youtube and twitter only)
 - [x] Host → service key (tldextract), plus subdomain and TLD checks (youtube and twitter configs only so far)
-- [ ] Pattern table and matcher (first match wins)
-- [ ] Per-service param testers
+- [x] Pattern table and matcher (first match wins)
+- [x] Per-service param testers (youtube and twitter only so far)
 - [ ] 50+ parametrized test cases taken from real links
 
 ## Phase 2: API contract

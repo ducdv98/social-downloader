@@ -1,6 +1,15 @@
 import pytest
 
-from social_downloader.domain.url import alias_url, clean_url, get_host_if_valid
+from social_downloader.domain.errors import ErrorCode, ExtractError
+from social_downloader.domain.url import (
+    SERVICES,
+    Extracted,
+    alias_url,
+    clean_url,
+    compile_pattern,
+    extract,
+    get_host_if_valid,
+)
 
 # (input, expected). Rows with expected == input must stay unchanged.
 ALIAS_CASES = [
@@ -68,7 +77,23 @@ ALIAS_CASES = [
         "https://youtube.com/shorts",
         id="shorts no id",
     ),
+    # shorts/live rewrite is youtube-only, other services keep the path
+    pytest.param(
+        "https://twitter.com/shorts/abc",
+        "https://twitter.com/shorts/abc",
+        id="twitter user named shorts",
+    ),
+    pytest.param(
+        "https://twitter.com/live/abc",
+        "https://twitter.com/live/abc",
+        id="twitter user named live",
+    ),
     pytest.param("", "", id="empty string"),
+    pytest.param(
+        "https://music.youtube.com/shorts/abc",
+        "https://youtube.com/watch?v=abc",
+        id="shorts on music subdomain",
+    ),
 ]
 
 
@@ -144,6 +169,17 @@ CLEAN_CASES = [
         id="root path becomes empty",
     ),
     pytest.param("", "", id="empty string"),
+    # Whitelist is keyed by service, so any valid subdomain keeps its param
+    pytest.param(
+        "https://music.youtube.com/watch?v=abc&list=x",
+        "https://music.youtube.com/watch?v=abc",
+        id="music subdomain keeps v",
+    ),
+    pytest.param(
+        "https://mobile.twitter.com/i/bookmarks?post_id=5&t=1",
+        "https://mobile.twitter.com/i/bookmarks?post_id=5",
+        id="mobile subdomain keeps post_id",
+    ),
 ]
 
 
@@ -188,3 +224,156 @@ HOST_CASES = [
 @pytest.mark.parametrize(("url", "expected"), HOST_CASES)
 def test_get_host_if_valid(url: str, expected: str | None) -> None:
     assert get_host_if_valid(url) == expected
+
+
+# (pattern, path, expected groupdict or None for no match)
+PATTERN_CASES = [
+    # Matches
+    pytest.param(
+        ":user/status/:id",
+        "jack/status/20",
+        {"user": "jack", "id": "20"},
+        id="twitter status",
+    ),
+    pytest.param(
+        "watch?v=:id",
+        "watch?v=abc",
+        {"id": "abc"},
+        id="query pattern",
+    ),
+    pytest.param(
+        ":user/status/:id",
+        "a.b@c:d~e-f_g/status/1",
+        {"user": "a.b@c:d~e-f_g", "id": "1"},
+        id="full charset in param",
+    ),
+    # No match
+    pytest.param(
+        ":user/status/:id",
+        "jack/status/20/x",
+        None,
+        id="anchored at end",
+    ),
+    pytest.param(
+        "watch?v=:id",
+        "watcv=abc",
+        None,
+        id="? is literal, not regex",
+    ),
+    pytest.param(
+        "embed/:id",
+        "embed/",
+        None,
+        id="param needs 1+ chars",
+    ),
+    pytest.param(
+        ":user/status/:id",
+        "a/b/status/1",
+        None,
+        id="param never crosses /",
+    ),
+]
+
+
+@pytest.mark.parametrize(("pattern", "path", "expected"), PATTERN_CASES)
+def test_compile_pattern(
+    pattern: str, path: str, expected: dict[str, str] | None
+) -> None:
+    match = compile_pattern(pattern).fullmatch(path)
+    assert (None if match is None else match.groupdict()) == expected
+
+
+# (normalized url, expected Extracted or ExtractError).
+# Input is already aliased + cleaned, like cobalt (schema.js normalizes first).
+EXTRACT_CASES = [
+    # Success
+    pytest.param(
+        "https://twitter.com/jack/status/20",
+        Extracted("twitter", {"user": "jack", "id": "20"}),
+        id="twitter status",
+    ),
+    pytest.param(
+        "https://twitter.com/jack/status/20/video/1",
+        Extracted("twitter", {"user": "jack", "id": "20", "index": "1"}),
+        id="twitter video index",
+    ),
+    pytest.param(
+        "https://twitter.com/i/bookmarks?post_id=20",
+        Extracted("twitter", {"id": "20"}),
+        id="twitter bookmarks query",
+    ),
+    pytest.param(
+        "https://youtube.com/watch?v=dQw4w9WgXcQ",
+        Extracted("youtube", {"id": "dQw4w9WgXcQ"}),
+        id="youtube watch",
+    ),
+    pytest.param(
+        "https://music.youtube.com/watch?v=abc",
+        Extracted("youtube", {"id": "abc"}),
+        id="youtube music subdomain",
+    ),
+    # Tester limits (service-patterns.js): youtube id <= 11, twitter id < 20
+    pytest.param(
+        "https://youtube.com/watch?v=" + "a" * 11,
+        Extracted("youtube", {"id": "a" * 11}),
+        id="youtube id 11 chars ok",
+    ),
+    pytest.param(
+        "https://twitter.com/u/status/" + "1" * 19,
+        Extracted("twitter", {"user": "u", "id": "1" * 19}),
+        id="twitter id 19 digits ok",
+    ),
+    # Errors
+    pytest.param(
+        "https://youtube.com/watch?v=" + "a" * 12,
+        ExtractError(ErrorCode.LINK_UNSUPPORTED, {"service": "youtube"}),
+        id="youtube id 12 chars rejected",
+    ),
+    pytest.param(
+        "https://twitter.com/u/status/" + "1" * 20,
+        ExtractError(ErrorCode.LINK_UNSUPPORTED, {"service": "twitter"}),
+        id="twitter id 20 digits rejected",
+    ),
+    pytest.param(
+        "https://example.com/x",
+        ExtractError(ErrorCode.LINK_INVALID),
+        id="unknown host",
+    ),
+    pytest.param(
+        "https://twitter.com/jack",
+        ExtractError(ErrorCode.LINK_UNSUPPORTED, {"service": "twitter"}),
+        id="no pattern matches",
+    ),
+]
+
+
+@pytest.mark.parametrize(("url", "expected"), EXTRACT_CASES)
+def test_extract(url: str, expected: Extracted | ExtractError) -> None:
+    assert extract(url) == expected
+
+
+def test_extract_service_disabled() -> None:
+    result = extract("https://twitter.com/jack/status/20", enabled_services=frozenset())
+    assert result == ExtractError(ErrorCode.SERVICE_DISABLED)
+
+
+def test_full_pipeline_music_subdomain() -> None:
+    url = "https://music.youtube.com/watch?v=abc&si=x"
+    assert extract(clean_url(alias_url(url))) == Extracted("youtube", {"id": "abc"})
+
+
+# Testers called directly. A missing param must fail, like JS `pattern.id?.length`
+# (undefined < 20 is false). `len(p.get("id", ""))` would wrongly pass.
+TESTER_CASES = [
+    pytest.param("youtube", {"id": "a" * 11}, True, id="youtube at limit"),
+    pytest.param("youtube", {"id": "a" * 12}, False, id="youtube over limit"),
+    pytest.param("youtube", {}, False, id="youtube missing id"),
+    pytest.param("twitter", {"id": "1" * 19}, True, id="twitter at limit"),
+    pytest.param("twitter", {"id": "1" * 20}, False, id="twitter over limit"),
+    pytest.param("twitter", {}, False, id="twitter missing id"),
+]
+
+
+@pytest.mark.parametrize(("service", "params", "expected"), TESTER_CASES)
+def test_service_tester(service: str, params: dict[str, str], expected: bool) -> None:
+    assert SERVICES[service].tester(params) is expected

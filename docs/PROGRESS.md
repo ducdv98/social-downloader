@@ -4,10 +4,9 @@ The handover between sessions. **Newest entry on top.** Keep each entry short.
 
 ## Current status
 
-- **Phase:** 1 (URL pipeline), in progress. Items 1-4 done (error codes, `alias_url`, `clean_url`, `get_host_if_valid`).
-- **Next step:** Phase 1, item 5: pattern table and matcher (first match wins). Cobalt reference: `extract`, `url.js:193-225`, and `patterns` in `service-config.js`.
-- **Open questions:** (1) Should URL errors be returned (cobalt-style result type) or raised (typed exception carrying an `ErrorCode`)? Decide when writing `extract`. (2) `alias_url`/`clean_url` still use hardcoded host sets (`YOUTUBE_HOSTS`, `QUERY_WHITELIST`); replace them with `SERVICES` lookups in item 5, when `ServiceConfig` gains `patterns`.
-
+- **Phase:** 1 (URL pipeline), in progress. Items 1-6 done (error codes, `alias_url`, `clean_url`, `get_host_if_valid`, pattern matcher `extract`, param testers).
+- **Next step:** Phase 1, item 7: 50+ parametrized test cases taken from real links (youtube + twitter), run through the full pipeline `extract(clean_url(alias_url(url)))`.
+- **Open questions:** (1) `_youtube_watch_url` always rewrites to `youtube.com`; cobalt keeps the subdomain (`music.youtube.com/watch?v=`). Harmless for `extract`; revisit if filenames or redirects care. (2) `urlsplit` raises `ValueError` on some malformed input (e.g. `https://[abc/`); decide in Phase 2 whether the request schema catches it, like cobalt's `new URL()` throwing in `schema.js`.
 ---
 
 ## Entry template
@@ -21,6 +20,12 @@ The handover between sessions. **Newest entry on top.** Keep each entry short.
 ```
 
 ---
+
+### 2026-11-26: Phase 1, pattern matcher, `extract`, param testers
+- Done: `compile_pattern` (cobalt `":user/status/:id"` → regex via `re.split` with a capture group, `re.escape`, named groups). `ServiceConfig.patterns` (compiled once at import through `_patterns`) and a required `tester` field. `ExtractError` (in `errors.py`) and `Extracted` frozen dataclasses. `extract(url, enabled_services)` returns `Extracted | ExtractError` (ADR 0002): `LINK_INVALID`, `SERVICE_DISABLED`, first match wins, tester failure or no match → `LINK_UNSUPPORTED` with `{"service": key}`. Fixed a music.youtube.com bug: `QUERY_WHITELIST` and the youtube alias are now keyed by service key via `_service_key` (`YOUTUBE_HOSTS` removed). 79 tests green, mypy clean.
+- Learned: regex metacharacters and `re.escape`; `(?P<name>...)` and `groupdict`; `^` inside `[]` means NOT; `fullmatch` as the anchor; the `r""` prefix only applies to literals; `tuple[X, ...]`, `*args`, dataclass field order; `field(default_factory=dict)`; frozen protects the reference, not the value; union returns and `isinstance` narrowing; JS `url.search` vs Python `query`; `Callable` and `lambda`; `a and b` returns an operand; `in` / `.get` / `d[k]` and mypy narrowing; JS `?.` is not `.get(k, "")`; watch IDE auto-imports.
+- Questions / blockers: see Open questions. A correction from this session: cobalt's testers are length caps only, and they don't resolve pattern ambiguity.
+- Next: Phase 1, item 7 (real-link test cases).
 
 ### 2026-11-24: Phase 1, `get_host_if_valid`
 - Done: added `tldextract` (offline: `TLDExtract(suffix_list_urls=())`). Frozen `ServiceConfig` dataclass (`tld="com"`, `subdomains: frozenset[str] | Literal["*"]`) and a `SERVICES` dict (youtube, twitter). `get_host_if_valid(url) -> str | None` checks the sld, then the tld, then the subdomain; `""` and `www` are always allowed. 19-row `HOST_CASES` table. 48 tests green, mypy clean.
