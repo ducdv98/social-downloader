@@ -30,7 +30,7 @@ Take one step per session. Tick boxes as you go.
 - [x] Host → service key (tldextract), plus subdomain and TLD checks (youtube and twitter configs only so far)
 - [x] Pattern table and matcher (first match wins)
 - [x] Per-service param testers (youtube and twitter only so far)
-- [ ] 50+ parametrized test cases taken from real links
+- [x] 50+ parametrized test cases taken from real links
 
 ## Phase 2: API contract
 

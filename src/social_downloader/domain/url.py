@@ -11,6 +11,7 @@ from social_downloader.domain.errors import ErrorCode, ExtractError
 _EXTRACTOR = tldextract.TLDExtract(suffix_list_urls=())
 
 TWITTER_ALT_HOSTS = frozenset({"x.com", "vxtwitter.com", "fixvx.com"})
+TWITTER_ALLOWED_SUBDOMAINS = frozenset({"mobile", "www", ""})
 YOUTUBE_WATCH_PREFIXES = frozenset({"shorts", "live"})
 
 QUERY_WHITELIST: dict[str, str] = {
@@ -22,6 +23,7 @@ _ALWAYS_ALLOWED_SUBDOMAINS: frozenset[str] = frozenset({"www", ""})
 
 _PARAM_NAME = r":([a-zA-Z0-9]+)"
 _CHARSET = r"a-zA-Z0-9_~ %@.:-"
+_DIGITS = re.compile(r"[0-9]+")
 
 
 def compile_pattern(pattern: str) -> re.Pattern[str]:
@@ -63,8 +65,12 @@ SERVICES: dict[str, ServiceConfig] = {
             ":user/status/:id/mediaViewer",
             "i/bookmarks?post_id=:id",
         ),
+        # Deviation from cobalt (ADR 0003): cobalt checks length only. We also
+        # require ASCII digits, since Python int() raises where JS Number() is NaN.
         tester=lambda pattern: (
-            "id" in pattern and len(pattern["id"]) < 20
+            "id" in pattern
+            and _DIGITS.fullmatch(pattern["id"]) is not None
+            and len(pattern["id"]) < 20
         ),  # Twitter IDs are 19 digits or less
         subdomains=frozenset({"mobile"}),
     ),
@@ -105,7 +111,16 @@ def alias_url(url: str) -> str:
     # "/a/b" -> ["", "a", "b"]
     segments = parts.path.split("/")
 
-    if host in TWITTER_ALT_HOSTS:
+    if not host:
+        return url
+    extracted_url = _EXTRACTOR(host)
+    subdomain = extracted_url.subdomain
+    base_domain = extracted_url.top_domain_under_public_suffix
+
+    # Deviation from cobalt (ADR 0003): cobalt aliases exact hosts only, so
+    # www.x.com fails. We also accept www./mobile.; any other subdomain is left
+    # alone, otherwise api.x.com would skip the subdomain check in extract.
+    if subdomain in TWITTER_ALLOWED_SUBDOMAINS and base_domain in TWITTER_ALT_HOSTS:
         return urlunsplit(parts._replace(netloc="twitter.com"))
 
     if host == "youtu.be" and len(segments) >= 2 and segments[1]:

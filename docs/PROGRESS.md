@@ -4,9 +4,9 @@ The handover between sessions. **Newest entry on top.** Keep each entry short.
 
 ## Current status
 
-- **Phase:** 1 (URL pipeline), in progress. Items 1-6 done (error codes, `alias_url`, `clean_url`, `get_host_if_valid`, pattern matcher `extract`, param testers).
-- **Next step:** Phase 1, item 7: 50+ parametrized test cases taken from real links (youtube + twitter), run through the full pipeline `extract(clean_url(alias_url(url)))`.
-- **Open questions:** (1) `_youtube_watch_url` always rewrites to `youtube.com`; cobalt keeps the subdomain (`music.youtube.com/watch?v=`). Harmless for `extract`; revisit if filenames or redirects care. (2) `urlsplit` raises `ValueError` on some malformed input (e.g. `https://[abc/`); decide in Phase 2 whether the request schema catches it, like cobalt's `new URL()` throwing in `schema.js`.
+- **Phase:** 1 (URL pipeline) done. Phase 2 (API contract) is next.
+- **Next step:** Phase 2, item 1: the pydantic request model mirroring cobalt's schema (only `url` required).
+- **Open questions:** (1) `_youtube_watch_url` always rewrites to `youtube.com`; cobalt keeps the subdomain (`music.youtube.com/watch?v=`). Harmless for `extract`; revisit if filenames or redirects care. (2) `urlsplit` raises `ValueError` on some malformed input (e.g. `https://[abc/`); decide in Phase 2 whether the request schema catches it, like cobalt's `new URL()` throwing in `schema.js`. (3) cobalt does `patternMatch.index - 1` on a string (JS coerces `"1"` to 0); the Phase 4 twitter extractor must convert with `int()` explicitly.
 ---
 
 ## Entry template
@@ -20,6 +20,12 @@ The handover between sessions. **Newest entry on top.** Keep each entry short.
 ```
 
 ---
+
+### 2026-11-26: Phase 1 done, real-link pipeline tests, two deviations from cobalt
+- Done: `PIPELINE_CASES`, 62 raw links (most real, from cobalt's `util/tests/{youtube,twitter}.json`) run through `_run = extract(clean_url(alias_url(url)))`. Two deviations from cobalt (ADR 0003): the twitter tester requires ASCII digits (`_DIGITS = re.compile(r"[0-9]+")`); `alias_url` also aliases `www.`/`mobile.` on alt domains via tldextract `subdomain` + `top_domain_under_public_suffix`, and leaves every other subdomain alone. Guard rows for `api.x.com`, `www.mobile.x.com`, `notx.com`, `x.com.evil.com`. 156 tests green, mypy clean.
+- Learned: pure-layer tests can't know a video exists (cobalt's 400s for dead links come from the network); JS `Number("abc")` is `NaN`, Python `int("abc")` raises; `\d` matches Unicode digits (`١٢٣`), `[0-9]` or `re.ASCII` doesn't; `a and re.fullmatch(...)` returns `None`, not `False`, so wrap it with `is not None` or `bool()`; `is` vs `==` in tester tests caught it too; aliasing must never turn an invalid host into a valid one; TDD red → green; PEP 8 two blank lines before a top-level `def`.
+- Questions / blockers: see Open questions (3 is new).
+- Next: Phase 2, item 1 (request model).
 
 ### 2026-11-26: Phase 1, pattern matcher, `extract`, param testers
 - Done: `compile_pattern` (cobalt `":user/status/:id"` → regex via `re.split` with a capture group, `re.escape`, named groups). `ServiceConfig.patterns` (compiled once at import through `_patterns`) and a required `tester` field. `ExtractError` (in `errors.py`) and `Extracted` frozen dataclasses. `extract(url, enabled_services)` returns `Extracted | ExtractError` (ADR 0002): `LINK_INVALID`, `SERVICE_DISABLED`, first match wins, tester failure or no match → `LINK_UNSUPPORTED` with `{"service": key}`. Fixed a music.youtube.com bug: `QUERY_WHITELIST` and the youtube alias are now keyed by service key via `_service_key` (`YOUTUBE_HOSTS` removed). 79 tests green, mypy clean.
