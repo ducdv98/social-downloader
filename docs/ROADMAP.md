@@ -38,9 +38,9 @@ Take one step per session. Tick boxes as you go.
 **Concepts:** FastAPI, pydantic v2 (`extra="forbid"`, defaults, discriminated unions), exception handlers, dependency injection, `TestClient`.
 **Reference:** `api/src/core/api.js`, `processing/schema.js`, `processing/request.js`, `docs/api.md`.
 
-- [ ] Request model mirroring cobalt's schema (only `url` required)
-- [ ] Response models: `redirect | tunnel | picker | local-processing | error`
-- [ ] Error mapping: dotted code, `context`, HTTP 400/500
+- [x] Request model mirroring cobalt's schema (only `url` required)
+- [x] Response models: `redirect | tunnel | picker | local-processing | error`
+- [ ] Error mapping: dotted code, `context`, HTTP 400/500 (mapping functions done; FastAPI exception handlers not yet)
 - [ ] Accept/Content-Type checks and a body size limit
 - [ ] `GET /` returns instance info
 - [ ] API tests covering every response type (using stubbed data)

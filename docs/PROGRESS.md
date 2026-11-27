@@ -4,9 +4,9 @@ The handover between sessions. **Newest entry on top.** Keep each entry short.
 
 ## Current status
 
-- **Phase:** 1 (URL pipeline) done. Phase 2 (API contract) is next.
-- **Next step:** Phase 2, item 1: the pydantic request model mirroring cobalt's schema (only `url` required).
-- **Open questions:** (1) `_youtube_watch_url` always rewrites to `youtube.com`; cobalt keeps the subdomain (`music.youtube.com/watch?v=`). Harmless for `extract`; revisit if filenames or redirects care. (2) `urlsplit` raises `ValueError` on some malformed input (e.g. `https://[abc/`); decide in Phase 2 whether the request schema catches it, like cobalt's `new URL()` throwing in `schema.js`. (3) cobalt does `patternMatch.index - 1` on a string (JS coerces `"1"` to 0); the Phase 4 twitter extractor must convert with `int()` explicitly.
+- **Phase:** 2 (API contract). Items 1 and 2 done; item 3 half done.
+- **Next step:** Phase 2, item 3, second half: create the FastAPI app with `POST /` (stubbed pipeline) and connect `from_validation_error` and `error_response` to it through exception handlers.
+- **Open questions:** (1) `_youtube_watch_url` always rewrites to `youtube.com`; cobalt keeps the subdomain (`music.youtube.com/watch?v=`). Harmless for `extract`; revisit if filenames or redirects care. (2) `urlsplit` raises `ValueError` on some malformed input (e.g. `https://[abc/`). The request schema no longer normalizes the URL (ADR 0004), so the service layer must catch it and return `link.invalid`. (3) cobalt does `patternMatch.index - 1` on a string (JS coerces `"1"` to 0); the Phase 4 twitter extractor must convert with `int()` explicitly. (4) zod's `.optional()` rejects `null`, but our `LangCode | None` accepts `"subtitleLang": null`. This is a small deviation; decide whether it matters.
 ---
 
 ## Entry template
@@ -20,6 +20,12 @@ The handover between sessions. **Newest entry on top.** Keep each entry short.
 ```
 
 ---
+
+### 2026-11-27: Phase 2, request model, response models, error mapping
+- Done: `domain/options.py` (8 `Literal` type aliases with cobalt's exact values). `api/schemas.py`: `ApiRequest` (camelCase aliases, `extra="forbid"`, `StrictBool`, `LangCode` with 2 to 8 characters, explicit `youtubeHLS` alias, `convert_gif` defaults to `True`); a `ResponseModel` base (`to_camel`, `validate_by_name`, `serialize_by_alias`); 5 response classes plus 6 nested classes; the `ApiResponse` discriminated union on `status`. `api/errors.py`: `ApiErrorCode`, `error_response` (400, `error.api.` prefix, context only when not empty), `critical_response` (500, `critical: true`), `from_validation_error` (cobalt's `!request.url` check gives `link.missing`, anything else gives `invalid_body`). ADR 0004. 232 tests green, ruff and mypy clean.
+- Learned: zod to pydantic mapping; `Literal` vs `StrEnum` (use StrEnum only when the name differs from the value); the PEP 695 `type` statement; `Annotated` + `StringConstraints` (`pattern`, not v1's `regex`); pydantic's lax vs strict mode, and why model-wide strict breaks enums when FastAPI passes a dict; alias-only validation rejects snake_case keys; `validate_by_name` (without it, the constructor silently drops snake_case values); a field named `copy` clashes with `BaseModel.copy` (use `copy_` with an alias); a base class should hold only what every child shares; discriminated unions and `TypeAdapter`; `ValidationError.errors()` keys (`loc`, `type`, `input`), and a missing key puts the whole body in `input`; `X | None` for a variable that may be empty; `collections.abc.Mapping` instead of `typing.Mapping`; remove debug `print` before committing.
+- Questions / blockers: see Open questions (4 is new; 2 is updated).
+- Next: Phase 2, item 3, second half (FastAPI app and exception handlers).
 
 ### 2026-11-26: Phase 1 done, real-link pipeline tests, two deviations from cobalt
 - Done: `PIPELINE_CASES`, 62 raw links (most real, from cobalt's `util/tests/{youtube,twitter}.json`) run through `_run = extract(clean_url(alias_url(url)))`. Two deviations from cobalt (ADR 0003): the twitter tester requires ASCII digits (`_DIGITS = re.compile(r"[0-9]+")`); `alias_url` also aliases `www.`/`mobile.` on alt domains via tldextract `subdomain` + `top_domain_under_public_suffix`, and leaves every other subdomain alone. Guard rows for `api.x.com`, `www.mobile.x.com`, `notx.com`, `x.com.evil.com`. 156 tests green, mypy clean.
